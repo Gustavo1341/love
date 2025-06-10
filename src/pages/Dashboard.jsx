@@ -29,7 +29,21 @@ export default function Dashboard() {
 
   const loadConfig = async () => {
     try {
-      const configs = await CoupleConfig.list();
+      console.log("Iniciando carregamento da configuração...");
+      // Definir um timeout para a operação de carregamento
+      const loadConfigWithTimeout = async () => {
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Timeout ao carregar configuração')), 10000);
+        });
+        
+        return Promise.race([
+          CoupleConfig.list(),
+          timeoutPromise
+        ]);
+      };
+      
+      const configs = await loadConfigWithTimeout();
+      
       if (configs.length > 0) {
         // Ensure all fields are initialized to prevent undefined errors
         const loadedConfig = configs[0];
@@ -41,11 +55,15 @@ export default function Dashboard() {
           custom_phrase: loadedConfig.custom_phrase || '',
           id: loadedConfig.id // keep id for updates
         });
+        console.log("Configuração carregada com sucesso");
       }
     } catch (error) {
       console.error("Erro ao carregar configuração:", error);
+      // Mesmo com erro, continuamos a operação para permitir criação de novo registro
+    } finally {
+      // Mesmo com erro no carregamento, permitimos que o usuário interaja com o formulário
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleSave = async () => {

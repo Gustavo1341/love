@@ -1,42 +1,96 @@
 // src/entities/CoupleConfig.js
 
+// Função auxiliar para fazer requisições com timeout
+const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 export const CoupleConfig = {
   async list() {
-    const response = await fetch('/api/config');
-    if (!response.ok) {
-      throw new Error('Failed to fetch config');
+    try {
+      console.log("CoupleConfig: Iniciando busca de configurações");
+      const startTime = Date.now();
+      
+      const response = await fetchWithTimeout('/api/config', {}, 8000);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch config: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log(`CoupleConfig: Busca concluída em ${Date.now() - startTime}ms`);
+      
+      return data ? [data] : [];
+    } catch (error) {
+      console.error("CoupleConfig list error:", error);
+      // Retornamos uma lista vazia em caso de erro para não quebrar a UI
+      return [];
     }
-    const data = await response.json();
-    return data ? [data] : [];
   },
 
   async create(data) {
-    const response = await fetch('/api/config', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      throw new Error('Failed to create config');
+    console.log("CoupleConfig: Criando nova configuração");
+    const startTime = Date.now();
+    
+    try {
+      const response = await fetchWithTimeout('/api/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      }, 10000);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create config: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`CoupleConfig: Criação concluída em ${Date.now() - startTime}ms`);
+      
+      return result;
+    } catch (error) {
+      console.error("CoupleConfig create error:", error);
+      throw error; // Propagamos o erro para que o usuário saiba que algo falhou
     }
-    return await response.json();
   },
 
   async update(id, data) {
-    const response = await fetch('/api/config', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // A API sabe que é um update por causa da presença do 'id'
-      body: JSON.stringify({ ...data, id }),
-    });
-    if (!response.ok) {
-      throw new Error('Failed to update config');
+    console.log(`CoupleConfig: Atualizando configuração ID ${id}`);
+    const startTime = Date.now();
+    
+    try {
+      const response = await fetchWithTimeout('/api/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...data, id }),
+      }, 10000);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to update config: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`CoupleConfig: Atualização concluída em ${Date.now() - startTime}ms`);
+      
+      return result;
+    } catch (error) {
+      console.error("CoupleConfig update error:", error);
+      throw error; // Propagamos o erro para que o usuário saiba que algo falhou
     }
-    return await response.json();
   },
 
   // Opcional: método para limpar/resetar para testes

@@ -1,14 +1,32 @@
 import { createClient } from '@supabase/supabase-js';
 
 // A API irá ler as variáveis de ambiente configuradas pela integração da Vercel
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
 
 console.log('API inicializada. Verificando variáveis de ambiente:');
 console.log('SUPABASE_URL definida:', !!supabaseUrl);
 console.log('SUPABASE_ANON_KEY definida:', !!supabaseKey);
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// IMPORTANTE: O cliente é criado FORA da função handler para ser reutilizado
+// entre as requisições - melhora substancialmente a performance
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false, // Evita problemas de sessão em funções serverless
+  },
+  // Definir um timeout mais curto para falhar rápido se houver problemas
+  global: {
+    fetch: (url, options) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000); // 7 segundos de timeout
+      
+      return fetch(url, {
+        ...options,
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeout));
+    }
+  }
+});
 
 /*
 export const config = {

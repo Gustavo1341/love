@@ -6,6 +6,21 @@ export const config = {
 };
 */
 
+// Define um timeout para a operação de upload
+const fetchWithTimeout = async (url, options, timeoutMs = 10000) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 export default async function handler(request) {
   console.log(`[${new Date().toISOString()}] Upload API iniciada`);
   const startTime = Date.now();
@@ -27,9 +42,16 @@ export default async function handler(request) {
     console.log(`Attempting to upload file: ${filename}`);
     console.log("Iniciando upload para o Vercel Blob...");
     
-    const blob = await put(filename, request.body, {
-      access: 'public',
-    });
+    // Adicionando um timeout de 20 segundos para o upload
+    // Isso evita que a função fique pendurada por muito tempo
+    const blob = await Promise.race([
+      put(filename, request.body, {
+        access: 'public',
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Upload timeout after 20s')), 20000)
+      )
+    ]);
     
     console.log("File uploaded successfully:", blob.url);
     const endTime = Date.now();
