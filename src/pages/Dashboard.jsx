@@ -31,23 +31,73 @@ export default function Dashboard() {
   const loadConfig = async () => {
     try {
       console.log("Iniciando carregamento da configuração...");
-      // Definir um timeout para a operação de carregamento
-      const loadConfigWithTimeout = async () => {
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Timeout ao carregar configuração')), 10000);
-        });
-        
-        return Promise.race([
-          CoupleConfig.list(),
-          timeoutPromise
-        ]);
-      };
       
-      const configs = await loadConfigWithTimeout();
+      // Para evitar o problema com "signal is aborted without reason",
+      // vamos usar uma Promise.race com um timeout mais longo
+      // e também adicionar mais proteção contra erros
       
-      if (configs.length > 0) {
+      let configData = null;
+      let loadingError = null;
+      
+      // Tentativas máximas
+      const maxAttempts = 3;
+      
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          console.log(`Tentando carregar configuração (tentativa ${attempt}/${maxAttempts})...`);
+          
+          // Definimos um timeout mais longo a cada tentativa
+          const timeoutMs = 15000 * attempt; // 15s, 30s, 45s
+          
+          // Função que vai tentar fazer o carregamento
+          const attemptLoad = async () => {
+            try {
+              return await CoupleConfig.list();
+            } catch (err) {
+              console.error(`Erro capturado em attemptLoad: ${err.message}`);
+              throw err;
+            }
+          };
+          
+          // Promise com timeout
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+              console.warn(`Timeout de ${timeoutMs}ms atingido na tentativa ${attempt}`);
+              reject(new Error(`Timeout após ${timeoutMs}ms`));
+            }, timeoutMs);
+          });
+          
+          // Fazemos a requisição com timeout
+          configData = await Promise.race([
+            attemptLoad(),
+            timeoutPromise
+          ]);
+          
+          console.log(`Configuração carregada com sucesso na tentativa ${attempt}`);
+          break; // Se chegou aqui, deu certo, podemos sair do loop
+          
+        } catch (error) {
+          console.error(`Erro na tentativa ${attempt}: ${error.message}`);
+          loadingError = error;
+          
+          // Se não é a última tentativa, esperamos um pouco e tentamos de novo
+          if (attempt < maxAttempts) {
+            const waitTime = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
+            console.log(`Aguardando ${waitTime}ms antes da próxima tentativa...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+        }
+      }
+      
+      // Se chegamos aqui sem configData, é porque todas as tentativas falharam
+      if (!configData && loadingError) {
+        console.error("Todas as tentativas de carregamento falharam:", loadingError);
+        throw loadingError;
+      }
+      
+      if (configData && configData.length > 0) {
         // Ensure all fields are initialized to prevent undefined errors
-        const loadedConfig = configs[0];
+        const loadedConfig = configData[0];
         setConfig({
           couple_name: loadedConfig.couple_name || '',
           relationship_start: loadedConfig.relationship_start || '',
@@ -57,6 +107,8 @@ export default function Dashboard() {
           id: loadedConfig.id // keep id for updates
         });
         console.log("Configuração carregada com sucesso");
+      } else {
+        console.log("Nenhuma configuração encontrada ou configuração vazia");
       }
     } catch (error) {
       console.error("Erro ao carregar configuração:", error);

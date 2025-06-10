@@ -22,17 +22,74 @@ export default function Home() {
       console.log("Home: Carregando configuração...");
       const startTime = Date.now();
       
-      const configs = await CoupleConfig.list();
+      // Implementação robusta com retry
+      let configData = null;
+      let loadingError = null;
+      
+      // Tentativas máximas
+      const maxAttempts = 3;
+      
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          console.log(`Home: Tentando carregar configuração (tentativa ${attempt}/${maxAttempts})...`);
+          
+          // Definimos um timeout mais longo a cada tentativa
+          const timeoutMs = 12000 * attempt; // 12s, 24s, 36s
+          
+          // Função que vai tentar fazer o carregamento
+          const attemptLoad = async () => {
+            try {
+              return await CoupleConfig.list();
+            } catch (err) {
+              console.error(`Home: Erro capturado em attemptLoad: ${err.message}`);
+              throw err;
+            }
+          };
+          
+          // Promise com timeout
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+              console.warn(`Home: Timeout de ${timeoutMs}ms atingido na tentativa ${attempt}`);
+              reject(new Error(`Timeout após ${timeoutMs}ms`));
+            }, timeoutMs);
+          });
+          
+          // Fazemos a requisição com timeout
+          configData = await Promise.race([
+            attemptLoad(),
+            timeoutPromise
+          ]);
+          
+          console.log(`Home: Configuração carregada com sucesso na tentativa ${attempt}`);
+          break; // Se chegou aqui, deu certo, podemos sair do loop
+          
+        } catch (error) {
+          console.error(`Home: Erro na tentativa ${attempt}: ${error.message}`);
+          loadingError = error;
+          
+          // Se não é a última tentativa, esperamos um pouco e tentamos de novo
+          if (attempt < maxAttempts) {
+            const waitTime = Math.min(1500 * Math.pow(2, attempt - 1), 8000);
+            console.log(`Home: Aguardando ${waitTime}ms antes da próxima tentativa...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+        }
+      }
       
       console.log(`Home: Configuração carregada em ${Date.now() - startTime}ms`);
       
-      if (configs.length > 0) {
-        setConfig(configs[0]);
+      if (configData && configData.length > 0) {
+        setConfig(configData[0]);
+      } else {
+        console.log("Home: Nenhuma configuração encontrada ou configuração vazia");
       }
+      
     } catch (error) {
       console.error("Erro ao carregar configuração:", error);
+      // Mesmo em caso de erro, permitimos que a página carregue para melhor UX
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   // Renderiza a UI imediatamente, mesmo enquanto carrega
