@@ -138,7 +138,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen pt-20 pb-8 px-4">
-      <div className={`max-w-4xl mx-auto space-y-8 transition-opacity ${isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+      <div className={`max-w-4xl mx-auto space-y-8 transition-opacity ${isLoading ? 'opacity-70' : 'opacity-100'}`}>
         
         {/* Header */}
         <div className="text-center space-y-4">
@@ -148,6 +148,11 @@ export default function Dashboard() {
             <Heart className="w-8 h-8 text-[#FF6B6B]" fill="currentColor" />
           </div>
           <p className="text-white/70 text-lg">Configure sua história de amor</p>
+          {isLoading && (
+            <div className="mt-2 text-[#FF6B6B] animate-pulse">
+              Carregando dados... (você pode começar a editar)
+            </div>
+          )}
         </div>
 
         {/* Basic Info */}
