@@ -1,8 +1,10 @@
 import { sql } from '@vercel/postgres';
 
+/*
 export const config = {
   runtime: 'edge',
 };
+*/
 
 async function handler(request) {
   try {
