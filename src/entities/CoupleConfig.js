@@ -19,31 +19,67 @@ const configCache = {
 };
 
 /**
- * Função genérica para fazer requisições à nossa API com tratamento de erro.
+ * Função genérica para fazer requisições à nossa API com tratamento de erro e retry.
  * @param {string} url - A URL da API.
  * @param {object} options - As opções para a função fetch.
+ * @param {number} maxRetries - Número máximo de tentativas (padrão: 2)
  * @returns {Promise<any>} - O corpo da resposta em JSON.
  */
-async function apiRequest(url, options = {}) {
-  try {
-    const response = await fetch(url, options);
+async function apiRequest(url, options = {}, maxRetries = 2) {
+  let lastError;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      // Se não for a primeira tentativa, adiciona um pequeno delay
+      if (attempt > 0) {
+        console.log(`CoupleConfig: Tentativa ${attempt}/${maxRetries} para ${url}`);
+        // Espera um tempo progressivo entre tentativas (300ms, 600ms, etc)
+        await new Promise(r => setTimeout(r, 300 * attempt));
+      }
+      
+      // Usa um timeout maior que o padrão do navegador
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos
+      
+      const fetchOptions = {
+        ...options,
+        signal: controller.signal
+      };
+      
+      const response = await fetch(url, fetchOptions);
+      clearTimeout(timeoutId); // Limpa o timeout se a requisição foi bem sucedida
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ 
+          message: `HTTP error! Status: ${response.status}` 
+        }));
+        throw new Error(errorData.message || 'Erro desconhecido na API');
+      }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ 
-        message: `HTTP error! Status: ${response.status}` 
-      }));
-      throw new Error(errorData.message || 'Erro desconhecido na API');
+      // Retorna null se a resposta não tiver corpo (ex: status 204)
+      const text = await response.text();
+      return text ? JSON.parse(text) : null;
+
+    } catch (error) {
+      lastError = error;
+      
+      // Loga o erro apenas se for a última tentativa ou um erro de abort
+      if (attempt === maxRetries || error.name === 'AbortError') {
+        console.error(`CoupleConfig: Erro na tentativa ${attempt+1}/${maxRetries+1}: ${error.message || error}`);
+      }
+      
+      // Se o erro for um timeout ou AbortError, tentamos novamente
+      if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+        continue; // tenta novamente
+      } else {
+        // Para outros tipos de erro (como problemas de servidor), lançamos o erro
+        throw error;
+      }
     }
-
-    // Retorna null se a resposta não tiver corpo (ex: status 204)
-    const text = await response.text();
-    return text ? JSON.parse(text) : null;
-
-  } catch (error) {
-    console.error(`Erro na requisição para ${url}:`, error);
-    // Propaga o erro para ser tratado por quem chamou a função.
-    throw error;
   }
+  
+  // Se chegamos aqui, significa que todas as tentativas falharam
+  throw lastError;
 }
 
 export const CoupleConfig = {
