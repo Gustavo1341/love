@@ -4,25 +4,19 @@
     {
       "src": "package.json",
       "use": "@vercel/static-build",
-      "config": { "distDir": "build" }
+      "config": {
+        "distDir": "build"
+      }
     },
     {
       "src": "src/pages/api/**/*.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/edge"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "/src/pages/api/$1"
-    },
-    {
-      "src": "/api/config",
-      "dest": "/api/config"
     },
     {
       "src": "/(.*)",
