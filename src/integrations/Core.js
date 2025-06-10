@@ -43,8 +43,8 @@ export const UploadFile = async ({ file }) => {
     const timeElapsed = Date.now() - startTime;
     
     if (result.isMock) {
-      console.warn(`⚠️ AVISO: Usando URL placeholder (${timeElapsed}ms). Vercel Blob não está configurado!`);
-      console.warn(`⚠️ Acesse https://vercel.com/docs/storage/vercel-blob para configurar o armazenamento.`);
+      console.warn(`⚠️ AVISO: Usando URL placeholder (${timeElapsed}ms). Supabase Storage não está configurado!`);
+      console.warn(`⚠️ Acesse https://supabase.com/docs/guides/storage/quickstart para configurar o armazenamento.`);
     } else {
       console.log(`Upload concluído em ${timeElapsed}ms. URL: ${result.url}`);
     }

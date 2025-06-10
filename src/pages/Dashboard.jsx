@@ -192,9 +192,9 @@ export default function Dashboard() {
           )}
           {isUsingMock && (
             <div className="mt-2 bg-yellow-600/20 text-yellow-400 p-3 rounded-md text-sm">
-              <strong>⚠️ Aviso:</strong> O sistema de armazenamento (Vercel Blob) não está configurado.
+              <strong>⚠️ Aviso:</strong> O sistema de armazenamento (Supabase Storage) precisa ser configurado.
               Os uploads estão usando URLs temporárias que não persistirão.
-              <a href="https://vercel.com/docs/storage/vercel-blob" className="underline ml-1" target="_blank" rel="noopener noreferrer">
+              <a href="https://supabase.com/docs/guides/storage/quickstart" className="underline ml-1" target="_blank" rel="noopener noreferrer">
                 Como configurar
               </a>
             </div>

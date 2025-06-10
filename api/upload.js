@@ -1,4 +1,4 @@
-import { put } from '@vercel/blob';
+import { createClient } from '@supabase/supabase-js';
 
 /*
 export const config = {
@@ -6,26 +6,10 @@ export const config = {
 };
 */
 
-// Define um timeout para a operação de upload
-const fetchWithTimeout = async (url, options, timeoutMs = 10000) => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  
-  try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
-};
-
-// Verificação para ver se o Vercel Blob está configurado
-const isVercelBlobConfigured = () => {
-  const storageConnectionString = process.env.BLOB_READ_WRITE_TOKEN;
-  return !!storageConnectionString;
-};
+// Inicializando o cliente Supabase
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default async function handler(request) {
   console.log(`[${new Date().toISOString()}] Upload API iniciada`);
@@ -51,25 +35,49 @@ export default async function handler(request) {
     });
   }
 
-  // Verificar se o Vercel Blob está configurado
-  const blobConfigured = isVercelBlobConfigured();
-  console.log(`Vercel Blob configurado: ${blobConfigured}`);
+  // Verificar se o Supabase está configurado
+  const isSupabaseConfigured = !!supabaseUrl && !!supabaseKey;
+  console.log(`Supabase configurado: ${isSupabaseConfigured}`);
 
   try {
     console.log(`Iniciando upload do arquivo: "${filename}"`);
     
     let url;
     
-    if (blobConfigured) {
-      // 2. Realizar o upload para o Vercel Blob
-      const blob = await put(filename, request.body, {
-        access: 'public',
-      });
-      url = blob.url;
+    if (isSupabaseConfigured) {
+      // Converter o corpo da requisição em um ArrayBuffer
+      const arrayBuffer = await request.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      
+      // Definir o tipo de arquivo (bucket) com base na extensão
+      const fileExtension = filename.split('.').pop().toLowerCase();
+      const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension);
+      const bucketName = isImage ? 'photos' : 'music';
+      
+      // Fazer upload para o Supabase Storage
+      const { data, error } = await supabase
+        .storage
+        .from(bucketName)
+        .upload(`uploads/${Date.now()}_${filename}`, buffer, {
+          contentType: request.headers.get('content-type') || 'application/octet-stream',
+          upsert: false
+        });
+      
+      if (error) {
+        throw new Error(`Erro no upload para o Supabase: ${error.message}`);
+      }
+      
+      // Obter a URL pública do arquivo
+      const { data: urlData } = supabase
+        .storage
+        .from(bucketName)
+        .getPublicUrl(data.path);
+      
+      url = urlData.publicUrl;
     } else {
       // Alternativa: Vamos usar uma URL de placeholder para teste
-      // No ambiente real, você precisará configurar o Vercel Blob
-      console.log("AVISO: Vercel Blob não configurado! Usando URL de placeholder");
+      // No ambiente real, você precisará configurar o Supabase
+      console.log("AVISO: Supabase não configurado para Storage! Usando URL de placeholder");
       const fileType = filename.split('.').pop().toLowerCase();
       
       if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileType)) {
@@ -91,7 +99,7 @@ export default async function handler(request) {
     return new Response(JSON.stringify({ 
       url: url,
       success: true,
-      isMock: !blobConfigured
+      isMock: !isSupabaseConfigured
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
