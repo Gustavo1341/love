@@ -1,0 +1,20 @@
+{
+  "functions": {
+    "api-edge/config.js": {
+      "runtime": "edge"
+    },
+    "api/**/*.js": {
+      "runtime": "nodejs"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/config",
+      "destination": "/api-edge/config"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    }
+  ]
+} 
