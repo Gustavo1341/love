@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { CoupleConfig } from "../entities/CoupleConfig";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "../utils";
-import { Settings } from "lucide-react";
+import { Settings, Heart } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 import FallingHearts from "../components/FallingHearts";
 import StoryCarousel from "../components/StoryCarousel";
@@ -18,83 +19,54 @@ export default function Home() {
   }, []);
 
   const loadConfig = async () => {
+    setIsLoading(true);
     try {
       console.log("Home: Carregando configuração...");
-      const startTime = Date.now();
+      const configs = await CoupleConfig.list();
       
-      // Implementação robusta com retry
-      let configData = null;
-      let loadingError = null;
-      
-      // Tentativas máximas
-      const maxAttempts = 3;
-      
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          console.log(`Home: Tentando carregar configuração (tentativa ${attempt}/${maxAttempts})...`);
-          
-          // Definimos um timeout mais longo a cada tentativa
-          const timeoutMs = 12000 * attempt; // 12s, 24s, 36s
-          
-          // Função que vai tentar fazer o carregamento
-          const attemptLoad = async () => {
-            try {
-              return await CoupleConfig.list();
-            } catch (err) {
-              console.error(`Home: Erro capturado em attemptLoad: ${err.message}`);
-              throw err;
-            }
-          };
-          
-          // Promise com timeout
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => {
-              console.warn(`Home: Timeout de ${timeoutMs}ms atingido na tentativa ${attempt}`);
-              reject(new Error(`Timeout após ${timeoutMs}ms`));
-            }, timeoutMs);
-          });
-          
-          // Fazemos a requisição com timeout
-          configData = await Promise.race([
-            attemptLoad(),
-            timeoutPromise
-          ]);
-          
-          console.log(`Home: Configuração carregada com sucesso na tentativa ${attempt}`);
-          break; // Se chegou aqui, deu certo, podemos sair do loop
-          
-        } catch (error) {
-          console.error(`Home: Erro na tentativa ${attempt}: ${error.message}`);
-          loadingError = error;
-          
-          // Se não é a última tentativa, esperamos um pouco e tentamos de novo
-          if (attempt < maxAttempts) {
-            const waitTime = Math.min(1500 * Math.pow(2, attempt - 1), 8000);
-            console.log(`Home: Aguardando ${waitTime}ms antes da próxima tentativa...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-          }
-        }
-      }
-      
-      console.log(`Home: Configuração carregada em ${Date.now() - startTime}ms`);
-      
-      if (configData && configData.length > 0) {
-        setConfig(configData[0]);
+      if (configs && configs.length > 0) {
+        setConfig(configs[0]);
+        console.log("Home: Configuração carregada com sucesso.");
       } else {
-        console.log("Home: Nenhuma configuração encontrada ou configuração vazia");
+        console.log("Home: Nenhuma configuração encontrada.");
       }
-      
     } catch (error) {
-      console.error("Erro ao carregar configuração:", error);
-      // Mesmo em caso de erro, permitimos que a página carregue para melhor UX
+      console.error("Home: Falha ao carregar configuração:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Renderiza a UI imediatamente, mesmo enquanto carrega
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="flex flex-col items-center">
+           <Heart className="w-16 h-16 text-[#FF6B6B] animate-pulse" />
+           <p className="text-white mt-4">Carregando sua história...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!config) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-center text-white">
+        <div>
+          <h1 className="text-4xl font-bold mb-4">Bem-vindo(a) à sua História de Amor!</h1>
+          <p className="text-xl mb-8">Parece que vocês ainda não configuraram sua página.</p>
+          <Link to={createPageUrl('Dashboard')}>
+            <Button size="lg" className="bg-[#FF6B6B] hover:bg-[#ff4f4f]">
+              <Heart className="mr-2 h-5 w-5" />
+              Começar a Configurar Agora
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
+    <div className="relative min-h-screen overflow-hidden">
       <FallingHearts />
       {config?.background_music_url && <BackgroundMusic musicUrl={config.background_music_url} />}
 
@@ -107,36 +79,26 @@ export default function Home() {
         <Settings className="w-5 h-5 text-white" />
       </Link>
 
-      {isLoading ? (
-        <div className="w-full max-w-md mx-auto space-y-8 relative z-20 flex flex-col items-center">
-          <div className="pulse-animation">
-            <div className="w-16 h-16 bg-[#FF6B6B] rounded-full flex items-center justify-center">
-              <span className="text-white text-2xl">♥</span>
-            </div>
+      <div className="w-full max-w-md mx-auto space-y-8 relative z-20">
+        {/* O componente agora controla sua própria borda, sem necessidade de um wrapper aqui */}
+        <StoryCarousel
+          photos={config?.photos || []}
+          coupleName={config?.couple_name}
+        />
+
+        {/* Time Counter */}
+        <TimeCounter
+          startDate={config?.relationship_start}
+          customPhrase={config?.custom_phrase}
+        />
+
+        {/* Heart button */}
+        <div className="flex justify-center">
+          <div className="w-16 h-16 bg-[#FF6B6B] rounded-full flex items-center justify-center pulse-animation">
+            <span className="text-white text-2xl">♥</span>
           </div>
         </div>
-      ) : (
-        <div className="w-full max-w-md mx-auto space-y-8 relative z-20">
-          {/* O componente agora controla sua própria borda, sem necessidade de um wrapper aqui */}
-          <StoryCarousel
-            photos={config?.photos || []}
-            coupleName={config?.couple_name}
-          />
-
-          {/* Time Counter */}
-          <TimeCounter
-            startDate={config?.relationship_start}
-            customPhrase={config?.custom_phrase}
-          />
-
-          {/* Heart button */}
-          <div className="flex justify-center">
-            <div className="w-16 h-16 bg-[#FF6B6B] rounded-full flex items-center justify-center pulse-animation">
-              <span className="text-white text-2xl">♥</span>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

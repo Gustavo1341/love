@@ -17,7 +17,8 @@ export default function Dashboard() {
     relationship_start: '',
     background_music_url: '',
     photos: [],
-    custom_phrase: ''
+    custom_phrase: '',
+    id: null
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -29,92 +30,29 @@ export default function Dashboard() {
   }, []);
 
   const loadConfig = async () => {
+    setIsLoading(true);
     try {
-      console.log("Iniciando carregamento da configuração...");
+      console.log("Dashboard: Carregando configuração...");
+      const configs = await CoupleConfig.list();
       
-      // Para evitar o problema com "signal is aborted without reason",
-      // vamos usar uma Promise.race com um timeout mais longo
-      // e também adicionar mais proteção contra erros
-      
-      let configData = null;
-      let loadingError = null;
-      
-      // Tentativas máximas
-      const maxAttempts = 3;
-      
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          console.log(`Tentando carregar configuração (tentativa ${attempt}/${maxAttempts})...`);
-          
-          // Definimos um timeout mais longo a cada tentativa
-          const timeoutMs = 15000 * attempt; // 15s, 30s, 45s
-          
-          // Função que vai tentar fazer o carregamento
-          const attemptLoad = async () => {
-            try {
-              return await CoupleConfig.list();
-            } catch (err) {
-              console.error(`Erro capturado em attemptLoad: ${err.message}`);
-              throw err;
-            }
-          };
-          
-          // Promise com timeout
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => {
-              console.warn(`Timeout de ${timeoutMs}ms atingido na tentativa ${attempt}`);
-              reject(new Error(`Timeout após ${timeoutMs}ms`));
-            }, timeoutMs);
-          });
-          
-          // Fazemos a requisição com timeout
-          configData = await Promise.race([
-            attemptLoad(),
-            timeoutPromise
-          ]);
-          
-          console.log(`Configuração carregada com sucesso na tentativa ${attempt}`);
-          break; // Se chegou aqui, deu certo, podemos sair do loop
-          
-        } catch (error) {
-          console.error(`Erro na tentativa ${attempt}: ${error.message}`);
-          loadingError = error;
-          
-          // Se não é a última tentativa, esperamos um pouco e tentamos de novo
-          if (attempt < maxAttempts) {
-            const waitTime = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
-            console.log(`Aguardando ${waitTime}ms antes da próxima tentativa...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-          }
-        }
-      }
-      
-      // Se chegamos aqui sem configData, é porque todas as tentativas falharam
-      if (!configData && loadingError) {
-        console.error("Todas as tentativas de carregamento falharam:", loadingError);
-        throw loadingError;
-      }
-      
-      if (configData && configData.length > 0) {
-        // Ensure all fields are initialized to prevent undefined errors
-        const loadedConfig = configData[0];
+      if (configs && configs.length > 0) {
+        const loadedConfig = configs[0];
         setConfig({
           couple_name: loadedConfig.couple_name || '',
           relationship_start: loadedConfig.relationship_start || '',
           background_music_url: loadedConfig.background_music_url || '',
           photos: loadedConfig.photos || [],
           custom_phrase: loadedConfig.custom_phrase || '',
-          id: loadedConfig.id // keep id for updates
+          id: loadedConfig.id
         });
-        console.log("Configuração carregada com sucesso");
+        console.log("Dashboard: Configuração carregada com sucesso", loadedConfig);
       } else {
-        console.log("Nenhuma configuração encontrada ou configuração vazia");
+        console.log("Dashboard: Nenhuma configuração encontrada, iniciando com formulário em branco.");
       }
     } catch (error) {
-      console.error("Erro ao carregar configuração:", error);
-      // Mesmo com erro, continuamos a operação para permitir criação de novo registro
+      console.error("Dashboard: Falha ao carregar configuração:", error);
+      // A UI continuará com o estado inicial em branco, permitindo a criação de uma nova config
     } finally {
-      // Mesmo com erro no carregamento, permitimos que o usuário interaja com o formulário
       setIsLoading(false);
     }
   };
@@ -122,19 +60,22 @@ export default function Dashboard() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Remove id before saving to avoid schema validation errors
       const { id, ...saveData } = config;
+      
       if (id) {
         await CoupleConfig.update(id, saveData);
       } else {
         const newConfig = await CoupleConfig.create(saveData);
-        setConfig(prev => ({ ...prev, id: newConfig.id }));
+        // Atualiza o estado com o novo objeto retornado, incluindo o ID
+        setConfig(newConfig);
       }
       
-      // Redirect to story page after saving
+      alert('Configurações salvas com sucesso!');
       navigate(createPageUrl("Home"));
+
     } catch (error) {
       console.error("Erro ao salvar:", error);
+      alert(`Falha ao salvar as configurações: ${error.message}`);
     }
     setIsSaving(false);
   };
@@ -145,59 +86,53 @@ export default function Dashboard() {
 
     setIsUploading(true);
     try {
-      // Verifica se já existe uma ID de configuração
-      // Se não existir, salvamos primeiro para ter um ID
-      let configId = config.id;
+      let currentConfig = config;
       
-      if (!configId) {
-        console.log('Nenhuma configuração salva ainda. Salvando primeiro...');
-        const newConfig = await CoupleConfig.create(config);
-        configId = newConfig.id;
-        
-        // Atualiza o state com o novo ID
+      // Se a configuração ainda não foi salva, salva primeiro para obter um ID.
+      if (!currentConfig.id) {
+        console.log('Configuração não salva. Salvando antes do upload...');
+        const newConfig = await CoupleConfig.create(currentConfig);
+        setConfig(newConfig); // Atualiza o state com a nova config (incluindo ID)
+        currentConfig = newConfig;
+        console.log('Configuração salva com ID:', newConfig.id);
+      }
+      
+      // Processa todos os arquivos selecionados
+      const uploadPromises = Array.from(files).map(file => 
+        UploadFile({ 
+          file, 
+          params: { couple_config_id: currentConfig.id } 
+        })
+      );
+      
+      const uploadResults = await Promise.all(uploadPromises);
+      
+      const newPhotos = uploadResults
+        .filter(result => result.success && !result.isMock)
+        .map(result => ({
+          url: result.file_url,
+          caption: '',
+          id: result.photo_id
+        }));
+
+      if (newPhotos.length > 0) {
         setConfig(prev => ({
           ...prev,
-          id: configId
+          photos: [...prev.photos, ...newPhotos]
         }));
       }
       
-      // Array para armazenar resultados de upload
-      const uploadResults = [];
+      // Verifica se algum upload usou mock ou falhou
+      const mockUploads = uploadResults.filter(r => r.isMock).length;
+      const failedUploads = uploadResults.filter(r => !r.success).length;
       
-      // Processamos um arquivo por vez
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        console.log(`Iniciando upload da foto ${i+1}/${files.length}: ${file.name}`);
-        
-        // Fazemos o upload com o ID da configuração
-        const { file_url, photo_id, is_registered_in_db } = await UploadFile({
-          file,
-          params: {
-            couple_config_id: configId
-          }
-        });
-        
-        if (file_url) {
-          uploadResults.push({
-            url: file_url,
-            caption: '',
-            id: photo_id
-          });
-          console.log(`Upload ${i+1}/${files.length} concluído: ${file_url}`);
-        }
+      if (mockUploads > 0 || failedUploads > 0) {
+        setIsUsingMock(true);
+        alert(`Atenção: ${failedUploads + mockUploads} arquivo(s) não foram salvos corretamente. Verifique a configuração do Supabase Storage.`);
       }
-      
-      // Atualiza o estado com as novas fotos
-      if (uploadResults.length > 0) {
-        setConfig(prev => ({
-          ...prev,
-          photos: [...prev.photos, ...uploadResults]
-        }));
-        
-        console.log(`${uploadResults.length} fotos adicionadas com sucesso`);
-      }
+
     } catch (error) {
-      console.error("Erro ao fazer upload das fotos:", error);
+      console.error("Erro no processo de upload de fotos:", error);
       alert(`Falha ao fazer upload das fotos: ${error.message}`);
     } finally {
       setIsUploading(false);
@@ -210,9 +145,7 @@ export default function Dashboard() {
 
     setIsUploading(true);
     try {
-      console.log(`Iniciando upload de música: ${file.name}`);
       const { file_url, isMock } = await UploadFile({ file });
-      console.log(`Upload concluído: ${file_url}`);
       
       if (isMock) {
         setIsUsingMock(true);
@@ -230,35 +163,37 @@ export default function Dashboard() {
     }
   };
 
-  const removePhoto = (index) => {
+  const removePhoto = (photoId) => {
+    // Aqui deveríamos chamar uma API para deletar a foto do banco e do storage.
+    // Por enquanto, vamos apenas remover do estado local.
+    console.log(`Removendo foto ID: ${photoId}`);
     setConfig(prev => ({
       ...prev,
-      photos: prev.photos.filter((_, i) => i !== index)
+      photos: prev.photos.filter((p) => p.id !== photoId)
     }));
   };
 
-  const updatePhotoCaption = (index, caption) => {
+  const updatePhotoCaption = (photoId, caption) => {
+     // Aqui deveríamos chamar uma API para atualizar a legenda no banco.
+     // Por enquanto, vamos apenas atualizar o estado local.
     setConfig(prev => ({
       ...prev,
-      photos: prev.photos.map((photo, i) => 
-        i === index ? { ...photo, caption } : photo
+      photos: prev.photos.map((photo) => 
+        photo.id === photoId ? { ...photo, caption } : photo
       )
     }));
   };
 
-  /*
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="pulse-animation">
-          <div className="w-16 h-16 bg-[#FF6B6B] rounded-full flex items-center justify-center">
-            <span className="text-white text-2xl">♥</span>
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="flex flex-col items-center">
+           <Heart className="w-16 h-16 text-[#FF6B6B] animate-pulse" />
+           <p className="text-white mt-4">Carregando sua história...</p>
         </div>
       </div>
     );
   }
-  */
 
   return (
     <div className="min-h-screen pt-20 pb-8 px-4">
@@ -369,7 +304,7 @@ export default function Dashboard() {
                         size="icon"
                         variant="destructive"
                         className="absolute top-2 right-2"
-                        onClick={() => removePhoto(index)}
+                        onClick={() => removePhoto(photo.id)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -377,7 +312,7 @@ export default function Dashboard() {
                     <Textarea
                       placeholder="Legenda da foto (opcional)"
                       value={photo.caption}
-                      onChange={(e) => updatePhotoCaption(index, e.target.value)}
+                      onChange={(e) => updatePhotoCaption(photo.id, e.target.value)}
                       className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                     />
                   </div>
