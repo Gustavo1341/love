@@ -88,30 +88,65 @@ export default function Dashboard() {
   };
 
   const handlePhotoUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files.length) return;
 
     setIsUploading(true);
     try {
-      console.log(`Iniciando upload de foto: ${file.name}`);
-      const { file_url, isMock } = await UploadFile({ file });
-      console.log(`Upload concluído: ${file_url}`);
+      // Verifica se já existe uma ID de configuração
+      // Se não existir, salvamos primeiro para ter um ID
+      let configId = config.id;
       
-      if (isMock) {
-        setIsUsingMock(true);
+      if (!configId) {
+        console.log('Nenhuma configuração salva ainda. Salvando primeiro...');
+        const newConfig = await CoupleConfig.create(config);
+        configId = newConfig.id;
+        
+        // Atualiza o state com o novo ID
+        setConfig(prev => ({
+          ...prev,
+          id: configId
+        }));
       }
       
-      const newPhoto = {
-        url: file_url,
-        caption: ''
-      };
-      setConfig(prev => ({
-        ...prev,
-        photos: [...prev.photos, newPhoto]
-      }));
+      // Array para armazenar resultados de upload
+      const uploadResults = [];
+      
+      // Processamos um arquivo por vez
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        console.log(`Iniciando upload da foto ${i+1}/${files.length}: ${file.name}`);
+        
+        // Fazemos o upload com o ID da configuração
+        const { file_url, photo_id, is_registered_in_db } = await UploadFile({
+          file,
+          params: {
+            couple_config_id: configId
+          }
+        });
+        
+        if (file_url) {
+          uploadResults.push({
+            url: file_url,
+            caption: '',
+            id: photo_id
+          });
+          console.log(`Upload ${i+1}/${files.length} concluído: ${file_url}`);
+        }
+      }
+      
+      // Atualiza o estado com as novas fotos
+      if (uploadResults.length > 0) {
+        setConfig(prev => ({
+          ...prev,
+          photos: [...prev.photos, ...uploadResults]
+        }));
+        
+        console.log(`${uploadResults.length} fotos adicionadas com sucesso`);
+      }
     } catch (error) {
-      console.error("Erro ao fazer upload:", error);
-      alert(`Falha ao fazer upload: ${error.message}`);
+      console.error("Erro ao fazer upload das fotos:", error);
+      alert(`Falha ao fazer upload das fotos: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
@@ -264,6 +299,7 @@ export default function Dashboard() {
                 onChange={handlePhotoUpload}
                 className="hidden"
                 disabled={isUploading}
+                multiple
               />
             </div>
 

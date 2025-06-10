@@ -22,6 +22,8 @@ export default async function handler(request) {
   // 1. Validar a solicitação
   const { searchParams } = new URL(request.url);
   const filename = searchParams.get('filename');
+  // Opcionalmente recebe o ID da configuração do casal
+  const coupleConfigId = searchParams.get('couple_config_id');
 
   if (!filename) {
     console.log("Erro: Parâmetro filename não fornecido");
@@ -49,20 +51,29 @@ export default async function handler(request) {
     console.log(`Iniciando upload do arquivo: "${filename}"`);
     
     let url;
+    let filePath;
+    let mimeType;
+    let sizeBytes;
+    let photoId;
+    let isRegisteredInDb = false;
     
     if (isSupabaseConfigured) {
       try {
         // Converter o corpo da requisição em um ArrayBuffer
         const arrayBuffer = await request.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
+        sizeBytes = buffer.length;
         
         // Definir o tipo de arquivo (bucket) com base na extensão
         const fileExtension = filename.split('.').pop().toLowerCase();
         const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension);
         const bucketName = isImage ? 'photos' : 'music';
+        mimeType = request.headers.get('content-type') || 
+                  (isImage ? `image/${fileExtension}` : 'application/octet-stream');
         
         console.log(`Bucket selecionado: ${bucketName}`);
         console.log(`Tamanho do arquivo: ${buffer.length} bytes`);
+        console.log(`Tipo MIME: ${mimeType}`);
         
         // Verificando se o bucket existe
         const { data: buckets, error: bucketError } = await supabase
@@ -80,12 +91,16 @@ export default async function handler(request) {
           throw new Error(`Bucket '${bucketName}' não existe no Supabase Storage.`);
         }
         
+        // Gerar um nome de arquivo único usando timestamp
+        const uniqueFilename = `uploads/${Date.now()}_${filename}`;
+        filePath = `${bucketName}/${uniqueFilename}`;
+        
         // Fazer upload para o Supabase Storage
         const { data, error } = await supabase
           .storage
           .from(bucketName)
-          .upload(`uploads/${Date.now()}_${filename}`, buffer, {
-            contentType: request.headers.get('content-type') || 'application/octet-stream',
+          .upload(uniqueFilename, buffer, {
+            contentType: mimeType,
             upsert: false
           });
         
@@ -101,6 +116,43 @@ export default async function handler(request) {
           .getPublicUrl(data.path);
         
         url = urlData.publicUrl;
+        
+        // Se for uma imagem, registrar no banco de dados
+        if (isImage && url) {
+          console.log('Registrando imagem no banco de dados...');
+          
+          try {
+            // Fazemos uma requisição para a API de fotos para registrar a imagem
+            const photoResponse = await fetch(`${process.env.VERCEL_URL || ''}/api/photos`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                public_url: url,
+                file_path: filePath,
+                mime_type: mimeType,
+                size_bytes: sizeBytes,
+                couple_config_id: coupleConfigId,
+              }),
+            });
+            
+            // Processamos a resposta
+            if (!photoResponse.ok) {
+              const errorData = await photoResponse.json();
+              console.error('Erro ao registrar foto no banco:', errorData);
+              // Não interrompemos o fluxo, apenas logamos o erro
+            } else {
+              const photoData = await photoResponse.json();
+              photoId = photoData.id;
+              isRegisteredInDb = true;
+              console.log(`Foto registrada no banco de dados com ID: ${photoId}`);
+            }
+          } catch (dbError) {
+            console.error('Erro ao registrar foto no banco:', dbError);
+            // Não interrompemos o fluxo, apenas logamos o erro
+          }
+        }
       } catch (supabaseError) {
         console.error('Erro específico do Supabase:', supabaseError);
         // Cai no fallback se houver qualquer erro com o Supabase
@@ -133,7 +185,10 @@ export default async function handler(request) {
     return new Response(JSON.stringify({ 
       url: url,
       success: true,
-      isMock: !url.includes(supabaseUrl)
+      isMock: !url.includes(supabaseUrl),
+      photo_id: photoId,
+      is_registered_in_db: isRegisteredInDb,
+      file_path: filePath
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

@@ -16,7 +16,7 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
   }
 };
 
-export const UploadFile = async ({ file }) => {
+export const UploadFile = async ({ file, params = {} }) => {
   if (!file) {
     throw new Error("No file provided to UploadFile function.");
   }
@@ -25,8 +25,20 @@ export const UploadFile = async ({ file }) => {
   const startTime = Date.now();
 
   try {
+    // Construir URL com parâmetros adicionais
+    let uploadUrl = `/api/upload?filename=${encodeURIComponent(file.name)}`;
+    
+    // Adicionar parâmetros extras à URL
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        uploadUrl += `&${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+      }
+    });
+    
+    console.log(`URL de upload: ${uploadUrl}`);
+    
     const response = await fetchWithTimeout(
-      `/api/upload?filename=${encodeURIComponent(file.name)}`,
+      uploadUrl,
       {
         method: 'POST',
         body: file,
@@ -64,7 +76,9 @@ export const UploadFile = async ({ file }) => {
       return {
         file_url: result.url,
         isMock: result.isMock,
-        success: result.success
+        success: result.success,
+        photo_id: result.photo_id,
+        is_registered_in_db: result.is_registered_in_db
       };
     }
     

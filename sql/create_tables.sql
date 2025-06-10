@@ -1,0 +1,71 @@
+-- Tabela para configuração do casal
+CREATE TABLE IF NOT EXISTS public.couple_config (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    couple_name TEXT,
+    relationship_start TIMESTAMP WITH TIME ZONE,
+    background_music_url TEXT,
+    custom_phrase TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Tabela para armazenar fotos
+CREATE TABLE IF NOT EXISTS public.photos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    file_path TEXT NOT NULL,
+    public_url TEXT NOT NULL,
+    caption TEXT,
+    mime_type TEXT,
+    size_bytes INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Tabela para relacionar fotos à configuração do casal
+CREATE TABLE IF NOT EXISTS public.couple_photos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    couple_config_id UUID NOT NULL REFERENCES public.couple_config(id) ON DELETE CASCADE,
+    photo_id UUID NOT NULL REFERENCES public.photos(id) ON DELETE CASCADE,
+    display_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    UNIQUE(couple_config_id, photo_id)
+);
+
+-- Índices para melhorar performance
+CREATE INDEX IF NOT EXISTS idx_couple_photos_couple_config_id ON public.couple_photos(couple_config_id);
+CREATE INDEX IF NOT EXISTS idx_couple_photos_photo_id ON public.couple_photos(photo_id);
+
+-- RLS (Row Level Security) - Opcional, mas recomendado para produção
+ALTER TABLE public.couple_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.photos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.couple_photos ENABLE ROW LEVEL SECURITY;
+
+-- Políticas que permitem acesso público para leitura, mas restringem escrita
+CREATE POLICY "Permitir leitura pública de couple_config" 
+    ON public.couple_config FOR SELECT USING (true);
+
+CREATE POLICY "Permitir leitura pública de photos" 
+    ON public.photos FOR SELECT USING (true);
+
+CREATE POLICY "Permitir leitura pública de couple_photos" 
+    ON public.couple_photos FOR SELECT USING (true);
+
+-- Função para atualizar o timestamp de 'updated_at'
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Triggers para atualizar 'updated_at' automaticamente
+CREATE TRIGGER update_couple_config_updated_at
+    BEFORE UPDATE ON public.couple_config
+    FOR EACH ROW
+    EXECUTE PROCEDURE update_updated_at_column();
+
+CREATE TRIGGER update_photos_updated_at
+    BEFORE UPDATE ON public.photos
+    FOR EACH ROW
+    EXECUTE PROCEDURE update_updated_at_column(); 
