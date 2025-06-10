@@ -1,9 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Executar esta função no Vercel Edge Runtime para latência mínima
-export const config = {
-  runtime: 'edge',
-};
+// A configuração de runtime agora é gerenciada pelo vercel.json
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
