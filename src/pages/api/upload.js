@@ -71,8 +71,7 @@ export default async function handler(request) {
       try {
         // Converter o corpo da requisição em um ArrayBuffer
         const arrayBuffer = await request.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        sizeBytes = buffer.length;
+        sizeBytes = arrayBuffer.byteLength;
         
         // Definir o tipo de arquivo (bucket) com base na extensão
         const fileExtension = filename.split('.').pop().toLowerCase();
@@ -82,7 +81,7 @@ export default async function handler(request) {
                   (isImage ? `image/${fileExtension}` : 'application/octet-stream');
         
         console.log(`Bucket selecionado: ${bucketName}`);
-        console.log(`Tamanho do arquivo: ${buffer.length} bytes`);
+        console.log(`Tamanho do arquivo: ${arrayBuffer.byteLength} bytes`);
         console.log(`Tipo MIME: ${mimeType}`);
         
         // Verificando se o bucket existe
@@ -109,7 +108,7 @@ export default async function handler(request) {
         const { data, error } = await supabase
           .storage
           .from(bucketName)
-          .upload(uniqueFilename, buffer, {
+          .upload(uniqueFilename, arrayBuffer, {
             contentType: mimeType,
             upsert: false
           });
@@ -132,8 +131,13 @@ export default async function handler(request) {
           console.log('Registrando imagem no banco de dados...');
           
           try {
-            // Fazemos uma requisição para a API de fotos para registrar a imagem
-            const photoResponse = await fetch(`${process.env.VERCEL_URL || ''}/api/photos`, {
+            // Usamos a variável de ambiente VERCEL_URL que a Vercel provê, 
+            // ou montamos a URL a partir dos headers da requisição.
+            const host = request.headers.get('host');
+            const protocol = host?.includes('localhost') ? 'http' : 'https';
+            const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `${protocol}://${host}`;
+
+            const photoResponse = await fetch(`${baseUrl}/api/photos`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
