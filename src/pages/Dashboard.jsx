@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUsingMock, setIsUsingMock] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -92,7 +93,14 @@ export default function Dashboard() {
 
     setIsUploading(true);
     try {
-      const { file_url } = await UploadFile({ file });
+      console.log(`Iniciando upload de foto: ${file.name}`);
+      const { file_url, isMock } = await UploadFile({ file });
+      console.log(`Upload concluído: ${file_url}`);
+      
+      if (isMock) {
+        setIsUsingMock(true);
+      }
+      
       const newPhoto = {
         url: file_url,
         caption: ''
@@ -103,8 +111,10 @@ export default function Dashboard() {
       }));
     } catch (error) {
       console.error("Erro ao fazer upload:", error);
+      alert(`Falha ao fazer upload: ${error.message}`);
+    } finally {
+      setIsUploading(false);
     }
-    setIsUploading(false);
   };
 
   const handleMusicUpload = async (e) => {
@@ -113,15 +123,24 @@ export default function Dashboard() {
 
     setIsUploading(true);
     try {
-      const { file_url } = await UploadFile({ file });
+      console.log(`Iniciando upload de música: ${file.name}`);
+      const { file_url, isMock } = await UploadFile({ file });
+      console.log(`Upload concluído: ${file_url}`);
+      
+      if (isMock) {
+        setIsUsingMock(true);
+      }
+      
       setConfig(prev => ({
         ...prev,
         background_music_url: file_url
       }));
     } catch (error) {
       console.error("Erro ao fazer upload da música:", error);
+      alert(`Falha ao fazer upload da música: ${error.message}`);
+    } finally {
+      setIsUploading(false);
     }
-    setIsUploading(false);
   };
 
   const removePhoto = (index) => {
@@ -169,6 +188,15 @@ export default function Dashboard() {
           {isLoading && (
             <div className="mt-2 text-[#FF6B6B] animate-pulse">
               Carregando dados... (você pode começar a editar)
+            </div>
+          )}
+          {isUsingMock && (
+            <div className="mt-2 bg-yellow-600/20 text-yellow-400 p-3 rounded-md text-sm">
+              <strong>⚠️ Aviso:</strong> O sistema de armazenamento (Vercel Blob) não está configurado.
+              Os uploads estão usando URLs temporárias que não persistirão.
+              <a href="https://vercel.com/docs/storage/vercel-blob" className="underline ml-1" target="_blank" rel="noopener noreferrer">
+                Como configurar
+              </a>
             </div>
           )}
         </div>
