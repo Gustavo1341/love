@@ -16,9 +16,36 @@ const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
   }
 };
 
+// Cache em memória para armazenar os dados entre navegações
+const configCache = {
+  data: null,
+  timestamp: 0,
+  // Cache válido por 5 minutos
+  isValid: function() {
+    return this.data && (Date.now() - this.timestamp < 5 * 60 * 1000);
+  },
+  set: function(data) {
+    this.data = data;
+    this.timestamp = Date.now();
+  },
+  clear: function() {
+    this.data = null;
+    this.timestamp = 0;
+  }
+};
+
 export const CoupleConfig = {
   async list() {
     try {
+      console.log("CoupleConfig: Verificando cache...");
+      
+      // Se temos dados em cache válidos, use-os
+      if (configCache.isValid()) {
+        console.log("CoupleConfig: Usando dados do cache");
+        return [configCache.data];
+      }
+      
+      console.log("CoupleConfig: Cache expirado ou vazio, buscando dados frescos");
       console.log("CoupleConfig: Iniciando busca de configurações");
       const startTime = Date.now();
       
@@ -30,6 +57,11 @@ export const CoupleConfig = {
       
       const data = await response.json();
       console.log(`CoupleConfig: Busca concluída em ${Date.now() - startTime}ms`);
+      
+      // Salva os dados no cache
+      if (data) {
+        configCache.set(data);
+      }
       
       return data ? [data] : [];
     } catch (error) {
@@ -59,6 +91,9 @@ export const CoupleConfig = {
       const result = await response.json();
       console.log(`CoupleConfig: Criação concluída em ${Date.now() - startTime}ms`);
       
+      // Atualiza o cache com os novos dados
+      configCache.set(result);
+      
       return result;
     } catch (error) {
       console.error("CoupleConfig create error:", error);
@@ -86,17 +121,21 @@ export const CoupleConfig = {
       const result = await response.json();
       console.log(`CoupleConfig: Atualização concluída em ${Date.now() - startTime}ms`);
       
+      // Atualiza o cache com os dados atualizados
+      configCache.set(result);
+      
       return result;
     } catch (error) {
       console.error("CoupleConfig update error:", error);
       throw error; // Propagamos o erro para que o usuário saiba que algo falhou
     }
   },
-
-  // Opcional: método para limpar/resetar para testes
-  // async _clear() {
-  //   localStorage.removeItem(CONFIG_KEY);
-  // }
+  
+  // Método para limpar o cache manualmente se necessário
+  clearCache() {
+    console.log("CoupleConfig: Limpando cache");
+    configCache.clear();
+  }
 };
 
 // Você pode também exportar o schema se precisar dele em outro lugar
