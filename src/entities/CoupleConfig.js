@@ -40,9 +40,9 @@ export const CoupleConfig = {
   },
 
   // Opcional: método para limpar/resetar para testes
-  async _clear() {
-    localStorage.removeItem(CONFIG_KEY);
-  }
+  // async _clear() {
+  //   localStorage.removeItem(CONFIG_KEY);
+  // }
 };
 
 // Você pode também exportar o schema se precisar dele em outro lugar
