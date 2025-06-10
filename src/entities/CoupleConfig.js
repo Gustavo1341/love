@@ -1,18 +1,23 @@
 // src/entities/CoupleConfig.js
 
-// Função auxiliar para fazer requisições com timeout
-const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
+// Função helper para timeout
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
+  console.log(`CoupleConfig: Iniciando fetch para ${url} com timeout de ${timeoutMs}ms`);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const id = setTimeout(() => {
+    console.warn(`CoupleConfig: Timeout de ${timeoutMs}ms atingido para ${url}`);
+    controller.abort();
+  }, timeoutMs);
   
   try {
     const response = await fetch(url, {
       ...options,
       signal: controller.signal
     });
+    console.log(`CoupleConfig: Fetch para ${url} concluído com status ${response.status}`);
     return response;
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(id);
   }
 };
 
@@ -49,21 +54,74 @@ export const CoupleConfig = {
       console.log("CoupleConfig: Iniciando busca de configurações");
       const startTime = Date.now();
       
-      const response = await fetchWithTimeout('/api/config', {}, 8000);
+      // Implementando sistema de retry
+      const maxRetries = 3;
+      let lastError = null;
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch config: ${response.status}`);
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`CoupleConfig: Tentativa ${attempt}/${maxRetries} de buscar configuração`);
+          
+          // Aumentamos o timeout a cada tentativa
+          const currentTimeout = 8000 * attempt; // 8s, 16s, 24s
+          
+          const response = await fetchWithTimeout('/api/config', {}, currentTimeout);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`CoupleConfig: Erro na resposta (status ${response.status}):`, errorText);
+            
+            let errorMessage;
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorMessage = errorJson.message || errorJson.error || `Failed with status: ${response.status}`;
+            } catch (e) {
+              errorMessage = errorText || `Failed with status: ${response.status}`;
+            }
+            
+            throw new Error(errorMessage);
+          }
+          
+          let data;
+          try {
+            data = await response.json();
+          } catch (jsonError) {
+            console.error("CoupleConfig: Erro ao processar JSON:", jsonError);
+            throw new Error("Falha ao processar resposta como JSON");
+          }
+          
+          console.log(`CoupleConfig: Busca concluída em ${Date.now() - startTime}ms`);
+          
+          // Salva os dados no cache somente se não estiver vazio
+          if (data && Object.keys(data).length > 0) {
+            configCache.set(data);
+            console.log("CoupleConfig: Dados salvos no cache");
+          } else {
+            console.log("CoupleConfig: Dados vazios, não foram salvos no cache");
+          }
+          
+          return data ? [data] : [];
+        } catch (error) {
+          console.error(`CoupleConfig: Erro na tentativa ${attempt}/${maxRetries}:`, error.message);
+          lastError = error;
+          
+          // Se não é a última tentativa, vamos tentar novamente
+          if (attempt < maxRetries) {
+            // Espera um pouco antes de tentar novamente (backoff exponencial)
+            const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+            console.log(`CoupleConfig: Aguardando ${waitTime}ms antes da próxima tentativa...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+          
+          // Se é a última tentativa, lançamos o erro
+          throw error;
+        }
       }
       
-      const data = await response.json();
-      console.log(`CoupleConfig: Busca concluída em ${Date.now() - startTime}ms`);
+      // Este ponto só é atingido se todas as tentativas falharem
+      throw lastError || new Error("Falha em todas as tentativas de buscar configuração");
       
-      // Salva os dados no cache
-      if (data) {
-        configCache.set(data);
-      }
-      
-      return data ? [data] : [];
     } catch (error) {
       console.error("CoupleConfig list error:", error);
       // Retornamos uma lista vazia em caso de erro para não quebrar a UI
@@ -76,25 +134,75 @@ export const CoupleConfig = {
     const startTime = Date.now();
     
     try {
-      const response = await fetchWithTimeout('/api/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      }, 10000);
+      // Implementando sistema de retry
+      const maxRetries = 3;
+      let lastError = null;
       
-      if (!response.ok) {
-        throw new Error(`Failed to create config: ${response.status}`);
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`CoupleConfig: Tentativa ${attempt}/${maxRetries} de criar configuração`);
+          
+          // Aumentamos o timeout a cada tentativa
+          const currentTimeout = 10000 * attempt; // 10s, 20s, 30s
+          
+          const response = await fetchWithTimeout('/api/config', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+          }, currentTimeout);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`CoupleConfig: Erro na resposta (status ${response.status}):`, errorText);
+            
+            let errorMessage;
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorMessage = errorJson.message || errorJson.error || `Failed with status: ${response.status}`;
+            } catch (e) {
+              errorMessage = errorText || `Failed with status: ${response.status}`;
+            }
+            
+            throw new Error(errorMessage);
+          }
+          
+          let result;
+          try {
+            result = await response.json();
+          } catch (jsonError) {
+            console.error("CoupleConfig: Erro ao processar JSON:", jsonError);
+            throw new Error("Falha ao processar resposta como JSON");
+          }
+          
+          console.log(`CoupleConfig: Criação concluída em ${Date.now() - startTime}ms`);
+          
+          // Atualiza o cache com os novos dados
+          configCache.set(result);
+          
+          return result;
+        } catch (error) {
+          console.error(`CoupleConfig: Erro na tentativa ${attempt}/${maxRetries}:`, error.message);
+          lastError = error;
+          
+          // Se não é a última tentativa, vamos tentar novamente
+          if (attempt < maxRetries) {
+            // Espera um pouco antes de tentar novamente (backoff exponencial)
+            const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+            console.log(`CoupleConfig: Aguardando ${waitTime}ms antes da próxima tentativa...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+          
+          // Se é a última tentativa, lançamos o erro
+          throw error;
+        }
       }
       
-      const result = await response.json();
-      console.log(`CoupleConfig: Criação concluída em ${Date.now() - startTime}ms`);
+      // Este ponto só é atingido se todas as tentativas falharem
+      throw lastError || new Error("Falha em todas as tentativas de criar configuração");
       
-      // Atualiza o cache com os novos dados
-      configCache.set(result);
-      
-      return result;
     } catch (error) {
       console.error("CoupleConfig create error:", error);
       throw error; // Propagamos o erro para que o usuário saiba que algo falhou
