@@ -122,6 +122,7 @@ export default function Dashboard() {
     }));
   };
 
+  /*
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -133,10 +134,11 @@ export default function Dashboard() {
       </div>
     );
   }
+  */
 
   return (
     <div className="min-h-screen pt-20 pb-8 px-4">
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className={`max-w-4xl mx-auto space-y-8 transition-opacity ${isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
         
         {/* Header */}
         <div className="text-center space-y-4">
