@@ -41,7 +41,9 @@ export const UploadFile = async ({ file, params = {} }) => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       // Construir URL com parâmetros adicionais
-      let uploadUrl = `/api/upload?filename=${encodeURIComponent(file.name)}`;
+      // Usamos window.location.origin para garantir que a URL base está correta, mesmo em produção
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      let uploadUrl = `${baseUrl}/api/upload?filename=${encodeURIComponent(file.name)}`;
       
       // Adicionar parâmetros extras à URL
       Object.entries(params).forEach(([key, value]) => {
