@@ -4,7 +4,7 @@ import { CoupleConfig } from "../entities/CoupleConfig";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "../utils";
 import { Settings, Heart } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "../components/ui/button";
 
 import FallingHearts from "../components/FallingHearts";
 import StoryCarousel from "../components/StoryCarousel";
