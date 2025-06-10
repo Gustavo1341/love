@@ -1,8 +1,10 @@
 import { put } from '@vercel/blob';
 
+/*
 export const config = {
   runtime: 'edge',
 };
+*/
 
 export default async function handler(request) {
   const { searchParams } = new URL(request.url);
