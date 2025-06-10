@@ -1,32 +1,42 @@
 // src/entities/CoupleConfig.js
-const CONFIG_KEY = 'coupleConfigLoveYuu';
-
-// Helper para simular um delay de API
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const CoupleConfig = {
   async list() {
-    await delay(300); // Simula latência da rede
-    const data = localStorage.getItem(CONFIG_KEY);
-    return data ? [JSON.parse(data)] : [];
+    const response = await fetch('/api/config');
+    if (!response.ok) {
+      throw new Error('Failed to fetch config');
+    }
+    const data = await response.json();
+    return data ? [data] : [];
   },
 
   async create(data) {
-    await delay(500);
-    const newConfig = { ...data, id: Date.now().toString() }; // Adiciona um ID simples
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(newConfig));
-    return newConfig;
+    const response = await fetch('/api/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to create config');
+    }
+    return await response.json();
   },
 
   async update(id, data) {
-    await delay(500);
-    const existingConfigs = await this.list();
-    if (existingConfigs.length > 0 && existingConfigs[0].id === id) {
-      const updatedConfig = { ...existingConfigs[0], ...data };
-      localStorage.setItem(CONFIG_KEY, JSON.stringify(updatedConfig));
-      return updatedConfig;
+    const response = await fetch('/api/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      // A API sabe que é um update por causa da presença do 'id'
+      body: JSON.stringify({ ...data, id }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update config');
     }
-    throw new Error("Config not found for update or ID mismatch");
+    return await response.json();
   },
 
   // Opcional: método para limpar/resetar para testes
