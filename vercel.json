@@ -3,7 +3,10 @@
     "api-edge/config.js": {
       "runtime": "edge"
     },
-    "api/**/*.js": {
+    "api/photos.js": {
+      "runtime": "nodejs18.x"
+    },
+    "api/upload.js": {
       "runtime": "nodejs18.x"
     }
   },
