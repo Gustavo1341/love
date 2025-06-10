@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+// Forçando um novo deploy para limpar o cache da Vercel - 2024-07-22
 import { CoupleConfig } from "../entities/CoupleConfig";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "../utils";
