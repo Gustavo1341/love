@@ -23,7 +23,17 @@ export default async function handler(request) {
   const { searchParams } = new URL(request.url);
   const filename = searchParams.get('filename');
   // Opcionalmente recebe o ID da configuração do casal
-  const coupleConfigId = searchParams.get('couple_config_id');
+  const coupleConfigIdParam = searchParams.get('couple_config_id');
+  let coupleConfigId = null;
+  
+  // Converte para número se estiver presente
+  if (coupleConfigIdParam) {
+    coupleConfigId = parseInt(coupleConfigIdParam, 10);
+    if (isNaN(coupleConfigId)) {
+      console.warn(`ID de configuração inválido: ${coupleConfigIdParam}. Será ignorado.`);
+      coupleConfigId = null;
+    }
+  }
 
   if (!filename) {
     console.log("Erro: Parâmetro filename não fornecido");

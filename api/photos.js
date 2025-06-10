@@ -38,6 +38,18 @@ export default async function handler(request) {
       
       if (coupleConfigId) {
         // Busca fotos relacionadas a uma configuração específica
+        // Certifique-se de que o ID seja tratado como número
+        const configIdNum = parseInt(coupleConfigId, 10);
+        
+        if (isNaN(configIdNum)) {
+          return new Response(JSON.stringify({ 
+            message: 'ID de configuração inválido. Deve ser um número.' 
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        
         const { data, error } = await supabase
           .from('couple_photos')
           .select(`
@@ -51,7 +63,7 @@ export default async function handler(request) {
               created_at
             )
           `)
-          .eq('couple_config_id', coupleConfigId)
+          .eq('couple_config_id', configIdNum)
           .order('display_order');
           
         if (error) throw error;
@@ -121,24 +133,31 @@ export default async function handler(request) {
       
       // 2. Se tiver um couple_config_id, relaciona a foto com a configuração
       if (couple_config_id) {
-        // Conta quantas fotos já existem para definir a ordem
-        const { count, error: countError } = await supabase
-          .from('couple_photos')
-          .select('*', { count: 'exact', head: true })
-          .eq('couple_config_id', couple_config_id);
-          
-        if (countError) throw countError;
+        // Certifique-se de que o ID seja tratado como número
+        const configIdNum = parseInt(couple_config_id, 10);
         
-        // Adiciona relacionamento
-        const { error: relationError } = await supabase
-          .from('couple_photos')
-          .insert({
-            couple_config_id,
-            photo_id: photo.id,
-            display_order: count || 0
-          });
+        if (isNaN(configIdNum)) {
+          console.warn('ID de configuração inválido, não será relacionado:', couple_config_id);
+        } else {
+          // Conta quantas fotos já existem para definir a ordem
+          const { count, error: countError } = await supabase
+            .from('couple_photos')
+            .select('*', { count: 'exact', head: true })
+            .eq('couple_config_id', configIdNum);
+            
+          if (countError) throw countError;
           
-        if (relationError) throw relationError;
+          // Adiciona relacionamento
+          const { error: relationError } = await supabase
+            .from('couple_photos')
+            .insert({
+              couple_config_id: configIdNum,
+              photo_id: photo.id,
+              display_order: count || 0
+            });
+            
+          if (relationError) throw relationError;
+        }
       }
       
       console.log(`Foto registrada com sucesso. ID: ${photo.id}`);
@@ -160,11 +179,23 @@ export default async function handler(request) {
         });
       }
       
+      // Certifique-se de que o ID seja tratado como número
+      const photoIdNum = parseInt(photoId, 10);
+      
+      if (isNaN(photoIdNum)) {
+        return new Response(JSON.stringify({ 
+          message: 'ID da foto inválido. Deve ser um número.' 
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      
       // 1. Obter o caminho do arquivo para poder excluí-lo do storage também
       const { data: photo, error: getError } = await supabase
         .from('photos')
         .select('file_path')
-        .eq('id', photoId)
+        .eq('id', photoIdNum)
         .single();
         
       if (getError && getError.code !== 'PGRST116') throw getError;
@@ -173,7 +204,7 @@ export default async function handler(request) {
       const { error: deleteError } = await supabase
         .from('photos')
         .delete()
-        .eq('id', photoId);
+        .eq('id', photoIdNum);
         
       if (deleteError) throw deleteError;
       
@@ -194,7 +225,7 @@ export default async function handler(request) {
         }
       }
       
-      console.log(`Foto removida com sucesso. ID: ${photoId}`);
+      console.log(`Foto removida com sucesso. ID: ${photoIdNum}`);
       return new Response(JSON.stringify({ 
         success: true,
         message: 'Foto removida com sucesso'
@@ -216,8 +247,20 @@ export default async function handler(request) {
         });
       }
       
+      // Certifique-se de que o ID seja tratado como número
+      const photoIdNum = parseInt(photoId, 10);
+      
+      if (isNaN(photoIdNum)) {
+        return new Response(JSON.stringify({ 
+          message: 'ID da foto inválido. Deve ser um número.' 
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      
       const updates = await request.json();
-      console.log(`Atualizando foto ${photoId}:`, updates);
+      console.log(`Atualizando foto ${photoIdNum}:`, updates);
       
       // Filtra apenas campos permitidos para atualização
       const allowedFields = ['caption'];
@@ -242,13 +285,13 @@ export default async function handler(request) {
       const { data, error } = await supabase
         .from('photos')
         .update(filteredUpdates)
-        .eq('id', photoId)
+        .eq('id', photoIdNum)
         .select()
         .single();
         
       if (error) throw error;
       
-      console.log(`Foto atualizada com sucesso. ID: ${photoId}`);
+      console.log(`Foto atualizada com sucesso. ID: ${photoIdNum}`);
       return new Response(JSON.stringify(data), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
