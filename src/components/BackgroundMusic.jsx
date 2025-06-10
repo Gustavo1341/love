@@ -3,7 +3,6 @@ import { Volume2, VolumeX } from 'lucide-react';
 
 export default function BackgroundMusic({ musicUrl }) {
   const audioRef = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
@@ -12,7 +11,6 @@ export default function BackgroundMusic({ musicUrl }) {
         audioRef.current.src = musicUrl;
         try {
           await audioRef.current.play();
-          setIsPlaying(true);
         } catch (error) {
           console.log("A reprodução automática foi bloqueada. O usuário precisa interagir com a página.");
           // A reprodução automática pode ser bloqueada, aguardando interação do usuário.
@@ -39,8 +37,6 @@ export default function BackgroundMusic({ musicUrl }) {
         autoPlay
         playsInline
         style={{ display: 'none' }}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
       />
       <button 
         onClick={toggleMute} 

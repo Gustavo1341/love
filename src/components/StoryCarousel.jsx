@@ -1,7 +1,5 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Heart } from 'lucide-react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function StoryCarousel({ photos, coupleName }) {
   const [currentIndex, setCurrentIndex] = useState(0);
