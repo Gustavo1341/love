@@ -251,7 +251,7 @@ export default async function handler(request) {
       const photoIdNum = parseInt(photoId, 10);
       
       if (isNaN(photoIdNum)) {
-        return new Response(JSON.stringify({ 
+         return new Response(JSON.stringify({ 
           message: 'ID da foto inválido. Deve ser um número.' 
         }), {
           status: 400,
@@ -259,64 +259,42 @@ export default async function handler(request) {
         });
       }
       
-      const updates = await request.json();
-      console.log(`Atualizando foto ${photoIdNum}:`, updates);
+      const payload = await request.json();
+      const { caption } = payload;
       
-      // Filtra apenas campos permitidos para atualização
-      const allowedFields = ['caption'];
-      const filteredUpdates = Object.keys(updates)
-        .filter(key => allowedFields.includes(key))
-        .reduce((obj, key) => {
-          obj[key] = updates[key];
-          return obj;
-        }, {});
-        
-      // Se não há campos válidos para atualizar, retorna erro
-      if (Object.keys(filteredUpdates).length === 0) {
-        return new Response(JSON.stringify({ 
-          message: 'Nenhum campo válido para atualização' 
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      
-      // Atualiza a foto
       const { data, error } = await supabase
         .from('photos')
-        .update(filteredUpdates)
+        .update({ caption })
         .eq('id', photoIdNum)
         .select()
         .single();
         
       if (error) throw error;
       
-      console.log(`Foto atualizada com sucesso. ID: ${photoIdNum}`);
+      console.log(`Legenda da foto atualizada com sucesso. ID: ${photoIdNum}`);
       return new Response(JSON.stringify(data), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
+
+    // Se o método não for suportado
+    return new Response(JSON.stringify({ message: 'Method Not Allowed' }), {
+      status: 405,
+      headers: { 'Allow': 'GET, POST, DELETE, PATCH' },
+    });
     
-    // Método não suportado
-    else {
-      return new Response(JSON.stringify({ message: 'Método não suportado' }), {
-        status: 405,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
   } catch (error) {
-    console.error('Erro na API de fotos:', error.message);
-    console.error(error.stack);
+    console.error('ERRO GERAL na API de Fotos:', error);
     
     return new Response(JSON.stringify({ 
-      message: 'Erro ao processar requisição',
-      error: error.message
+      error: 'Erro interno do servidor',
+      message: error.message
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
   } finally {
-    console.log(`Requisição processada em ${Date.now() - startTime}ms`);
+    console.log(`Photos API finalizada em ${Date.now() - startTime}ms`);
   }
 } 

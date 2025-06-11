@@ -41,187 +41,115 @@ const DEFAULT_CONFIG = {
   photos: []
 };
 
-async function handler(request) {
-  const { method } = request;
-  const startTime = Date.now();
+export default async function handler(request) {
+  const { method, body, url } = request;
+  const { searchParams } = new URL(url);
+  const id = searchParams.get('id');
 
-  console.log(`[Edge API] /api/config received ${method} request. (${startTime})`);
-  
-  if (!supabaseUrl || !supabaseKey) {
-    console.error('[Edge API] /api/config: Variáveis de ambiente do Supabase não estão configuradas.');
-    return new Response(JSON.stringify(DEFAULT_CONFIG), {
-      status: 200,
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-Config-Source': 'default-no-env'
-      },
-    });
-  }
-
-  // Implementa um timeout para toda a função
-  const responsePromise = handleRequest(request, method, startTime);
-  
-  // Força a resposta após 50 segundos para evitar o timeout de 60s da Vercel
-  const timeoutPromise = new Promise(resolve => {
-    setTimeout(() => {
-      console.error(`[Edge API] Timeout forçado após ${Date.now() - startTime}ms. Enviando dados padrão.`);
-      resolve(new Response(JSON.stringify(DEFAULT_CONFIG), {
-        status: 200,
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Config-Source': 'timeout-fallback' 
-        },
-      }));
-    }, 50000); // 50 segundos, dando 10s de margem
-  });
-
-  // Retorna o que terminar primeiro: a requisição normal ou o timeout
-  return Promise.race([responsePromise, timeoutPromise]);
-}
-
-async function handleRequest(request, method, startTime) {
   try {
-    if (method === 'GET') {
-      // Primeira tentativa: Buscar com o join (mais completo, mas pode ser mais lento)
-      try {
-        const { data, error } = await supabase
-          .from('couple_config')
-          .select(`
+    switch (method) {
+      case 'GET':
+        let query = supabase.from('couple_config').select(`
+          *,
+          photos: couple_photos (
             *,
-            photos:couple_photos(
-              photo:photo_id(
-                id,
-                public_url,
-                caption
-              )
-            )
-          `)
-          .limit(1)
-          .single()
-          .timeout(8000); // 8 segundos máximos para esta query
+            photo: photos (*)
+          )
+        `);
+        
+        if (id) {
+          query = query.eq('id', id).single();
+        } else {
+          // Por padrão, retorna o primeiro (e único) registro
+          query = query.limit(1).single();
+        }
 
-        if (!error) {
-          // Formata os dados para o cliente
-          const formattedData = data ? {
-            ...data,
-            photos: data.photos.map(p => ({
-              id: p.photo.id,
-              url: p.photo.public_url,
-              caption: p.photo.caption
-            }))
-          } : null;
+        const { data: getData, error: getError } = await query;
 
-          console.log(`[Edge API] GET /api/config success (join query) in ${Date.now() - startTime}ms.`);
-          return new Response(JSON.stringify(formattedData || DEFAULT_CONFIG), {
-            status: 200,
-            headers: { 
-              'Content-Type': 'application/json', 
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'X-Config-Source': data ? 'full-join-query' : 'default-no-data'
-            },
+        if (getError && getError.code !== 'PGRST116') { // Ignora erro de "nenhum resultado"
+          console.error('Erro ao buscar configuração:', getError);
+          throw getError;
+        }
+        
+        // Formata os dados para o cliente
+        const formattedData = getData ? {
+          ...getData,
+          photos: getData.photos?.map(p => ({
+            id: p.photo.id,
+            url: p.photo.public_url,
+            caption: p.photo.caption,
+            display_order: p.display_order
+          })).sort((a,b) => a.display_order - b.display_order) || []
+        } : null;
+
+        return new Response(JSON.stringify(id ? formattedData : [formattedData].filter(Boolean)), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+      case 'POST':
+        const createData = typeof body === 'string' ? JSON.parse(body) : body;
+        
+        // Remove o campo 'photos' se ele existir, pois ele é gerenciado separadamente
+        if ('photos' in createData) {
+          delete createData.photos;
+        }
+
+        const { data: postData, error: postError } = await supabase
+          .from('couple_config')
+          .insert(createData)
+          .select()
+          .single();
+
+        if (postError) {
+          console.error('Erro ao criar configuração:', postError);
+          throw postError;
+        }
+        return new Response(JSON.stringify(postData), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+      case 'PUT':
+        if (!id) {
+          return new Response(JSON.stringify({ message: 'ID é obrigatório para atualização' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
           });
         }
+        const updateData = typeof body === 'string' ? JSON.parse(body) : body;
         
-        console.warn(`[Edge API] GET /api/config join query failed: ${error.message}. Tentando consulta simples...`);
-      } catch (joinError) {
-        console.warn(`[Edge API] GET /api/config join query error: ${joinError.message}. Tentando consulta simples...`);
-      }
-      
-      // Segunda tentativa: Buscar apenas a config (mais rápido, sem fotos)
-      try {
-        const { data, error } = await supabase
-          .from('couple_config')
-          .select('*')
-          .limit(1)
-          .single()
-          .timeout(5000); // 5 segundos máximos para esta query simples
-
-        if (error && error.code !== 'PGRST116') { // PGRST116: "exact one row not found"
-          console.error('Supabase simple GET error:', error.message);
-          throw error;
+        // Remove o campo 'photos' se ele existir
+        if ('photos' in updateData) {
+            delete updateData.photos;
         }
-        
-        console.log(`[Edge API] GET /api/config success (simple query) in ${Date.now() - startTime}ms.`);
-        return new Response(JSON.stringify(data || DEFAULT_CONFIG), {
-          status: 200,
-          headers: { 
-            'Content-Type': 'application/json', 
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'X-Config-Source': data ? 'simple-query' : 'default-no-data'
-          },
-        });
-      } catch (simpleError) {
-        console.error(`[Edge API] GET /api/config simple query error: ${simpleError.message}`);
-        throw simpleError;
-      }
 
-    } else if (method === 'POST') {
-      const config = await request.json();
-      const { id, ...updateData } = config;
-
-      // Não salvamos as fotos diretamente aqui, isso é feito em outro lugar
-      delete updateData.photos;
-
-      let responseData;
-      
-      if (id) {
-        // Atualiza
-        const { data, error } = await supabase
+        const { data: putData, error: putError } = await supabase
           .from('couple_config')
           .update(updateData)
           .eq('id', id)
           .select()
-          .single()
-          .timeout(15000); // 15s timeout para operações de escrita
-          
-        if (error) {
-           console.error('Supabase POST (update) error:', error.message);
-           throw error;
-        }
-        responseData = data;
-      } else {
-        // Cria
-        const { data, error } = await supabase
-          .from('couple_config')
-          .insert(updateData)
-          .select()
-          .single()
-          .timeout(15000); // 15s timeout para operações de escrita
-          
-        if (error) {
-          console.error('Supabase POST (create) error:', error.message);
-          throw error;
-        }
-        responseData = data;
-      }
+          .single();
 
-      console.log(`[Edge API] POST /api/config success in ${Date.now() - startTime}ms.`);
-      return new Response(JSON.stringify(responseData), {
-        status: 200,
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Config-Source': 'post-success'
-        },
-      });
+        if (putError) {
+          console.error('Erro ao atualizar configuração:', putError);
+          throw putError;
+        }
+        return new Response(JSON.stringify(putData), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
 
-    } else {
-      return new Response(JSON.stringify({ message: 'Method Not Allowed' }), { 
-        status: 405, 
-        headers: { 'Allow': 'GET, POST' } 
-      });
+      default:
+        return new Response(JSON.stringify({ message: 'Método não permitido' }), {
+          status: 405,
+          headers: { 'Allow': 'GET, POST, PUT' },
+        });
     }
   } catch (error) {
-    console.error(`[Edge API] /api/config error after ${Date.now() - startTime}ms: ${error.message}`);
-    
-    // Dados padrão em caso de erro
-    return new Response(JSON.stringify(DEFAULT_CONFIG), {
-      status: 200, // Retorna 200 com dados padrão em vez de 500
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-Config-Source': 'error-fallback'
-      },
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
     });
   }
-}
-
-export default handler; 
+} 
