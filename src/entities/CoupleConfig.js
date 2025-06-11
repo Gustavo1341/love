@@ -18,6 +18,16 @@ const configCache = {
   }
 };
 
+// Helper para construir a URL completa da API
+const getApiUrl = (path) => {
+  // Em um ambiente de navegador, window.location.origin estará disponível
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}${path}`;
+  }
+  // Fallback para ambientes de servidor (não deve ser usado pelo cliente)
+  return path;
+};
+
 /**
  * Função genérica para fazer requisições à nossa API com tratamento de erro e retry.
  * @param {string} url - A URL da API.
@@ -41,12 +51,15 @@ async function apiRequest(url, options = {}, maxRetries = 2) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos
       
+      // Usamos o helper para garantir a URL completa
+      const fullUrl = getApiUrl(url);
+      
       const fetchOptions = {
         ...options,
         signal: controller.signal
       };
       
-      const response = await fetch(url, fetchOptions);
+      const response = await fetch(fullUrl, fetchOptions);
       clearTimeout(timeoutId); // Limpa o timeout se a requisição foi bem sucedida
       
       if (!response.ok) {
