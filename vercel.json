@@ -12,14 +12,5 @@
       "src": "src/pages/api/**/*.js",
       "use": "@vercel/node"
     }
-  ],
-  "routes": [
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
   ]
 } 
